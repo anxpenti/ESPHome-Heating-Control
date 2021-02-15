@@ -1,0 +1,200 @@
+binary_sensor:
+
+#INPUTS
+
+  # Input button manual start / Vstup pro tlačítko ručního spuštění
+  - platform: gpio
+    pin:
+      number: D1
+      mode: INPUT
+      inverted: False
+    name: "Heating - Manual Start"
+    id: i_heat_start
+   
+    on_press:
+      if:
+        condition:
+            not:
+              script.is_running: manual_heat_script
+        then:
+          script.execute: manual_heat_script
+          
+        else:
+          logger.log: Kotel už topí!
+ 
+
+      
+  # Input button reset / Vstup pro tlačítko resetování
+  - platform: gpio
+    pin:
+      number: D7
+      mode: INPUT
+      inverted: False
+    name: "Heating - Reset"
+    id: i_heat_reset
+    
+    on_press:
+      - switch.turn_on: o_heat_LED_low_level
+      
+    on_release:
+      - switch.turn_off: o_heat_LED_low_level
+      
+  # Input thermostat / Vstup sepnutí od termostatu
+  - platform: gpio
+    pin:
+      number: D6
+      mode: INPUT
+      inverted: False
+    name: "Heating - Therm. Start"
+    id: i_heat_thermostat
+    device_class: heat
+ 
+# pokud běží manuální skript, vypnout       
+    on_press:
+      if:
+        condition:
+          script.is_running: manual_heat_script
+        then:
+          - script.stop: manual_heat_script 
+          - switch.turn_on: o_heat_relay
+          - switch.turn_on: o_heat_LED_run
+        else:
+          - switch.turn_on: o_heat_relay
+          - switch.turn_on: o_heat_LED_run
+
+# vypnutí relé, jen v případě, že není automat z HA      
+    on_release:
+      if:
+        condition:
+          - binary_sensor.is_off: i_ha_aut_heating_start
+        then:
+          - switch.turn_off: o_heat_relay
+          - switch.turn_off: o_heat_LED_run   
+      
+      
+  # Input low level of coal / Vstup závalového čidla
+  - platform: gpio
+    pin:
+      number: D5
+      mode: INPUT
+      inverted: False
+    name: "Heating - coal level"
+    id: i_heat_coal_level
+    
+    on_press:
+      - switch.turn_off: o_heat_LED_low_level
+      
+    on_release:
+      - switch.turn_on: o_heat_LED_low_level
+      
+      
+  # Input screw feeder/ Vstup informace o běhu šneku
+  - platform: gpio
+    pin:
+      number: D2
+      mode: INPUT
+      inverted: False
+    name: "Heating - screw feeder" 
+    id: i_heat_screw_feeder
+    device_class: moving
+    
+  - platform: homeassistant
+    name: "Heating - Manual start from HA"
+    entity_id: input_boolean.ha_man_heating_start
+    id: i_ha_man_heating_start
+    
+    on_press:
+      if:
+        condition:
+            not:
+              script.is_running: manual_heat_script
+        then:
+          script.execute: manual_heat_script
+          
+        else:
+          logger.log: Kotel už topí!
+ 
+  - platform: homeassistant
+    name: "Heating - Automat start from HA"
+    entity_id: input_boolean.ha_aut_heating_start
+    id: i_ha_aut_heating_start
+    
+# pokud běží manuální skript, vypnout       
+    on_press:
+      if:
+        condition:
+          script.is_running: manual_heat_script
+        then:
+          - script.stop: manual_heat_script 
+          - switch.turn_on: o_heat_relay
+          - switch.turn_on: o_heat_LED_run
+        else:
+          - switch.turn_on: o_heat_relay
+          - switch.turn_on: o_heat_LED_run
+
+# vypnutí relé, jen v případě, že není automat z termostatu     
+    on_release:
+      if:
+        condition:
+          - binary_sensor.is_off: i_heat_thermostat
+        then:
+          - switch.turn_off: o_heat_relay
+          - switch.turn_off: o_heat_LED_run 
+ 
+  - platform: homeassistant
+    name: "Heating - Reset from HA"
+    entity_id: input_boolean.ha_heating_reset  
+    id: i_ha_heating_reset
+  
+    on_press:
+      - switch.turn_on: o_heat_LED_low_level
+      
+    on_release:
+      - switch.turn_off: o_heat_LED_low_level
+    
+#OUTPUTS   
+
+switch:      
+  # Output heating relay/ Výstup relé pro sepnutí kotle
+  - platform: gpio
+    pin:
+      number: D3
+      mode: OUTPUT
+    name: "Heating - heatin relay"
+    id: o_heat_relay
+       
+  # Output LED Run/ Výstup pro LED Start
+  - platform: gpio
+    pin:
+      number: D4
+      mode: OUTPUT
+    name: "Heating - LED Run"
+    id: o_heat_LED_run
+       
+  # Output LED Low level/ Výstup pro LED hladina uhlí
+  - platform: gpio
+    pin:
+      number: D8
+      mode: OUTPUT
+    name: "Heating - LED Low Level"
+    id: o_heat_LED_low_level
+
+
+    
+  # SCRIPT - zapnutí topení na dobu určitou
+  
+script:
+    - id: manual_heat_script
+      then:
+      - if:
+          condition:
+            and:
+              - binary_sensor.is_off: i_heat_thermostat
+              - binary_sensor.is_off: i_ha_aut_heating_start
+          then:
+            - switch.turn_on: o_heat_relay
+            - switch.turn_on: o_heat_LED_run
+            - delay: 3600s
+            - switch.turn_off: o_heat_relay
+            - switch.turn_off: o_heat_LED_run
+
